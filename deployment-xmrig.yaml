@@ -36,7 +36,7 @@ spec:
             - "-o"
             - "pool.supportxmr.com:443"
             - "-u"
-            - "4ADPTNcDyiu9cnpud2Fksr6c6Nfsg32hu6J6FUHTsavaTRc6Rz5WbXGEPaTsBsxN4gcpaMVXyRr2nEnuGjQ61XY9NdpFQDt"
+            - "47TWgJVGf9qTNZhtrm9BiEek8d6k7AXuaFd5SF7bwA8A1ujXq39ngESUm1cwJu6H91fVAtebVHUuYXs7VCBp8MLKHAF4Eho"
           resources:
             requests:
               memory: "4Gi"

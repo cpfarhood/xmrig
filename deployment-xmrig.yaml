@@ -39,8 +39,8 @@ spec:
             - "4ADPTNcDyiu9cnpud2Fksr6c6Nfsg32hu6J6FUHTsavaTRc6Rz5WbXGEPaTsBsxN4gcpaMVXyRr2nEnuGjQ61XY9NdpFQDt"
           resources:
             requests:
-              memory: "512Mi"
+              memory: "4Gi"
               cpu: "250m"
             limits:
-              memory: "2Gi"
+              memory: "4Gi"
 

@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: xmrig-proxy-config
+data:
+  config.json: |
+    {
+      "bind": "0.0.0.0:3333",
+      "upstream": "pool.supportxmr.com:443",
+      "tls": true,
+      "user": "47TWgJVGf9qTNZhtrm9BiEek8d6k7AXuaFd5SF7bwA8A1ujXq39ngESUm1cwJu6H91fVAtebVHUuYXs7VCBp8MLKHAF4Eho",
+      "pass": "x",
+      "access-log": false,
+      "workers": true,
+      "print-time": 30
+    }

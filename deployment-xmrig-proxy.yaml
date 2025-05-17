@@ -1,0 +1,27 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: xmrig-proxy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: xmrig-proxy
+  template:
+    metadata:
+      labels:
+        app: xmrig-proxy
+    spec:
+      containers:
+        - name: xmrig-proxy
+          image: xmrig/xmrig-proxy:latest
+          volumeMounts:
+            - name: config-volume
+              mountPath: /xmrig-proxy/config.json
+              subPath: config.json
+          ports:
+            - containerPort: 3333
+      volumes:
+        - name: config-volume
+          configMap:
+            name: xmrig-proxy-config

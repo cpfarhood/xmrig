@@ -28,14 +28,6 @@ spec:
       containers:
         - name: xmrig
           image: miningcontainers/xmrig:latest
-          command: ["/bin/sh", "-c"]
-          args:
-            - |
-              wget https://raw.githubusercontent.com/xmrig/xmrig/dev/scripts/randomx_boost.sh -O randomx_boost.sh \
-              && chmod +x randomx_boost.sh \
-              && ./randomx_boost.sh \
-              && rm -rf randomx_boost.sh \
-              && ./xmrig
           env:
             - name: XMRIG_URL
               value: "pool.supportxmr.com:443"

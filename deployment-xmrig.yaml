@@ -31,7 +31,7 @@ spec:
           command: ["/bin/sh", "-c"]
           args:
             - |
-              wget https://raw.githubusercontent.com/xmrig/xmrig/dev/scripts/randomx_boost.sh -v -O randomx_boost.sh \
+              wget https://raw.githubusercontent.com/xmrig/xmrig/dev/scripts/randomx_boost.sh -O randomx_boost.sh \
               && chmod +x randomx_boost.sh \
               && ./randomx_boost.sh \
               && rm -rf randomx_boost.sh \
@@ -49,7 +49,7 @@ spec:
               value: "x"
           resources:
             requests:
-              memory: "3Gi"
+              memory: "4Gi"
               cpu: "250m"
             limits:
               memory: "4Gi"

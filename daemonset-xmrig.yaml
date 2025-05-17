@@ -1,18 +1,15 @@
-## This is a proxy that solves Cloudflare's CAPTCHA challenge for automated services
----
 apiVersion: apps/v1
-kind: Deployment
+kind: DaemonSet
 metadata:
   name: xmrig
   labels:
     app.kubernetes.io/name: xmrig
   annotations:
-    polaris.fairwinds.com/tagNotSpecified-exempt: true  # Latest tag is desired here
+    polaris.fairwinds.com/tagNotSpecified-exempt: true
 spec:
   selector:
     matchLabels:
       app.kubernetes.io/name: xmrig
-  replicas: 0
   template:
     metadata:
       labels:
@@ -21,12 +18,12 @@ spec:
       affinity:
         podAntiAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
-          - podAffinityTerm:
-              labelSelector:
-                matchLabels:
-                  name: xmrig
-              topologyKey: kubernetes.io/hostname
-            weight: 100
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    name: xmrig
+                topologyKey: kubernetes.io/hostname
       containers:
         - name: xmrig
           image: miningcontainers/xmrig:latest
@@ -41,4 +38,3 @@ spec:
             limits:
               memory: "4Gi"
               cpu: "2"
-

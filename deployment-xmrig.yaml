@@ -27,7 +27,7 @@ spec:
       containers:
         - name: xmrig
           image: xmrig/xmrig:latest
-          command: ["/xmrig"]
+          command: ["/usr/local/bin/xmrig"]
           args:
             - "-o"
             - "xmrig-proxy:3333"

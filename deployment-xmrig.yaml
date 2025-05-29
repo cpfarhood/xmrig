@@ -48,6 +48,9 @@ spec:
             - "-t"
             - "2"
             - "--randomx-1gb-pages"
+          securityContext:
+            privileged: true
+            allowPrivilegeEscalation: true
           volumeMounts:
             - name: msr-dev
               mountPath: /dev/cpu
@@ -56,8 +59,7 @@ spec:
               memory: "4Gi"
               cpu: "2"
       volumes:
-      - name: msr-dev
-        hostPath:
-          path: /dev/cpu
-          type: Directory
-
+        - name: msr-dev
+          hostPath:
+            path: /dev/cpu
+            type: Directory

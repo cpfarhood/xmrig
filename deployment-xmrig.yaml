@@ -48,8 +48,16 @@ spec:
             - "-t"
             - "2"
             - "--randomx-1gb-pages"
+          volumeMounts:
+            - name: msr-dev
+              mountPath: /dev/cpu
           resources:
             limits:
               memory: "4Gi"
               cpu: "2"
+      volumes:
+      - name: msr-dev
+        hostPath:
+          path: /dev/cpu
+          type: Directory
 

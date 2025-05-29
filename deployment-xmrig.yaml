@@ -19,6 +19,14 @@ spec:
         app.kubernetes.io/name: xmrig
     spec:
       affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: farh.net/intel-cpu-gen
+                operator: Gt
+                values:
+                - "9"
         podAntiAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
           - podAffinityTerm:

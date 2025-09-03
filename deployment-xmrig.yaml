@@ -42,7 +42,7 @@ spec:
             - "-o"
             - "pool.supportxmr.com:443"
             - "-u"
-            - "8AFd7YDwXGDCoxSasZHrsTZ574Dq6z7hS8o88mw12KiU1Yx4f4NnWenL7Nkg3fbNHm7rbssirDuZ8MbGDWDWNPUUM6SNJgU"
+            - "8B8AB3jeWm1ZpCrAJLDqqoN1nMo5BJssK7vSW5ntuYqU19CB8NnDZ4ZUq4MdZo7nn1CEXmSa2jUx4cwsSCXmL2gd3iTva9c"
             - "-t"
             - "2"
             - "--randomx-1gb-pages"

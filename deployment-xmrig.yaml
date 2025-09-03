@@ -30,7 +30,7 @@ spec:
           - podAffinityTerm:
               labelSelector:
                 matchLabels:
-                  name: xmrig
+                  app.kubernetes.io/name: xmrig
               topologyKey: kubernetes.io/hostname
             weight: 100
       containers:

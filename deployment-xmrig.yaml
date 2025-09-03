@@ -23,10 +23,8 @@ spec:
           requiredDuringSchedulingIgnoredDuringExecution:
             nodeSelectorTerms:
             - matchExpressions:
-              - key: farh.net/intel-cpu-gen
-                operator: Gt
-                values:
-                - "9"
+              - key: node-role.kubernetes.io/worker
+                operator: Exists
         podAntiAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
           - podAffinityTerm:
@@ -57,7 +55,7 @@ spec:
           resources:
             limits:
               memory: "4Gi"
-              cpu: "2"
+              cpu: "4"
       volumes:
         - name: msr-dev
           hostPath:

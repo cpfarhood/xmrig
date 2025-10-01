@@ -19,14 +19,13 @@ spec:
         app.kubernetes.io/name: xmrig
     spec:
       affinity:
-        podAntiAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-          - podAffinityTerm:
-              labelSelector:
-                matchLabels:
-                  app.kubernetes.io/name: xmrig
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: app.kubernetes.io/name
+                    operator: In
+                    values: ["xmrig"]
               topologyKey: kubernetes.io/hostname
-            weight: 100
       containers:
         - name: xmrig
           image: miningcontainers/xmrig:latest
@@ -42,6 +41,11 @@ spec:
             - "-t"
             - "2"
             - "--randomx-1gb-pages"
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
           securityContext:
             privileged: true
             allowPrivilegeEscalation: true

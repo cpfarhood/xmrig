@@ -12,19 +12,13 @@ spec:
   selector:
     matchLabels:
       app.kubernetes.io/name: xmrig
-  replicas: 2
+  replicas: 3
   template:
     metadata:
       labels:
         app.kubernetes.io/name: xmrig
     spec:
       affinity:
-        nodeAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-            nodeSelectorTerms:
-            - matchExpressions:
-              - key: node-role.kubernetes.io/worker
-                operator: Exists
         podAntiAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
           - podAffinityTerm:
@@ -37,6 +31,8 @@ spec:
         - name: xmrig
           image: miningcontainers/xmrig:latest
           args:
+            - "--rig-id"
+            - "$(POD_NAME)"
             - "-k"
             - "--tls"
             - "-o"

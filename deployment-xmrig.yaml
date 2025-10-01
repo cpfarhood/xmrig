@@ -30,7 +30,7 @@ spec:
         - name: xmrig
           image: miningcontainers/xmrig:latest
           args:
-            - "--rig-id"
+            - "-p"
             - "$(POD_NAME)"
             - "-k"
             - "--tls"

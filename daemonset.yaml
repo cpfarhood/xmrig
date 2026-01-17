@@ -40,7 +40,7 @@ spec:
           command: ["sh","-ec"]
           args:
             - |
-              exec nice -n 19 ionice -c3 xmrig \
+              exec nice -n 19 ionice -c3 /xmrig/build/xmrig \
                 -p "${POD_NAME}" \
                 -k --tls \
                 -o "pool.supportxmr.com:443" \

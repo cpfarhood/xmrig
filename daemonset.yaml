@@ -27,7 +27,7 @@ spec:
           requiredDuringSchedulingIgnoredDuringExecution:
             nodeSelectorTerms:
              - matchExpressions:
-                 - key: node-role.kubernetes.io/control-plane
+                  - key: node-role.kubernetes.io/control-plane
                     operator: DoesNotExist
                   - key: node-role.kubernetes.io/master
                     operator: DoesNotExist

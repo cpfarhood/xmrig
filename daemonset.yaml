@@ -1,0 +1,77 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: xmrig
+  labels:
+    app.kubernetes.io/name: xmrig
+  annotations:
+    polaris.fairwinds.com/tagNotSpecified-exempt: "true"
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: xmrig
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: xmrig
+        app.kubernetes.io/version: "6.25"
+    spec:
+      priorityClassName: low-priority
+      terminationGracePeriodSeconds: 10
+
+      # Avoid control-plane nodes (k3s + kubeadm patterns)
+      #affinity:
+      #  nodeAffinity:
+      #    requiredDuringSchedulingIgnoredDuringExecution:
+      #      nodeSelectorTerms:
+      #       - matchExpressions:
+      #           - key: node-role.kubernetes.io/control-plane
+      #              operator: DoesNotExist
+      #            - key: node-role.kubernetes.io/master
+      #              operator: DoesNotExist
+
+      containers:
+        - name: xmrig
+          image: miningcontainers/xmrig:latest
+
+          # Lowest CPU priority inside the container (scheduler still decides placement)
+          command: ["sh","-ec"]
+          args:
+            - |
+              exec nice -n 19 ionice -c3 xmrig \
+                -p "${POD_NAME}" \
+                -k --tls \
+                -o "pool.supportxmr.com:443" \
+                -u "8B8AB3jeWm1ZpCrAJLDqqoN1nMo5BJssK7vSW5ntuYqU19CB8NnDZ4ZUq4MdZo7nn1CEXmSa2jUx4cwsSCXmL2gd3iTva9c" \
+                -t "2" \
+                --randomx-1gb-pages
+
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+
+          securityContext:
+            privileged: true
+            allowPrivilegeEscalation: true
+
+          volumeMounts:
+            - name: msr-dev
+              mountPath: /dev/cpu
+
+          # No CPU requests/limits at all.
+          # Memory only (limit + request to avoid accidental eviction and to be explicit).
+          resources:
+            requests:
+              memory: "4Gi"
+            limits:
+              memory: "4Gi"
+
+      volumes:
+        - name: msr-dev
+          hostPath:
+            path: /dev/cpu
+            type: Directory

@@ -20,27 +20,37 @@ spec:
     spec:
       priorityClassName: low-priority
       terminationGracePeriodSeconds: 10
+      automountServiceAccountToken: false
 
-      # Avoid control-plane nodes (k3s + kubeadm patterns)
-      #affinity:
-      #  nodeAffinity:
-      #    requiredDuringSchedulingIgnoredDuringExecution:
-      #      nodeSelectorTerms:
-      #       - matchExpressions:
-      #           - key: node-role.kubernetes.io/control-plane
-      #              operator: DoesNotExist
-      #            - key: node-role.kubernetes.io/master
-      #              operator: DoesNotExist
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: node-role.kubernetes.io/control-plane
+                    operator: DoesNotExist
+                  - key: node-role.kubernetes.io/master
+                    operator: DoesNotExist
 
       containers:
         - name: xmrig
           image: miningcontainers/xmrig:latest
+          imagePullPolicy: Always
 
-          # Lowest CPU priority inside the container (scheduler still decides placement)
           command: ["sh","-ec"]
           args:
             - |
-              exec nice -n 19 ionice -c3 xmrig \
+              BIN=""
+              for p in /xmrig /usr/local/bin/xmrig /usr/bin/xmrig /bin/xmrig; do
+                if [ -x "$p" ]; then BIN="$p"; break; fi
+              done
+              if [ -z "$BIN" ]; then
+                echo "xmrig binary not found"
+                find / -maxdepth 4 -type f -name xmrig 2>/dev/null || true
+                exit 127
+              fi
+
+              exec nice -n 19 ionice -c3 "$BIN" \
                 -p "${POD_NAME}" \
                 -k --tls \
                 -o "pool.supportxmr.com:443" \
@@ -62,8 +72,6 @@ spec:
             - name: msr-dev
               mountPath: /dev/cpu
 
-          # No CPU requests/limits at all.
-          # Memory only (limit + request to avoid accidental eviction and to be explicit).
           resources:
             requests:
               memory: "4Gi"

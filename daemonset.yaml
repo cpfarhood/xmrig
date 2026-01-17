@@ -20,7 +20,8 @@ spec:
     spec:
       priorityClassName: low-priority
       terminationGracePeriodSeconds: 10
-
+      automountServiceAccountToken: false
+      
       # Avoid control-plane nodes (k3s + kubeadm patterns)
       affinity:
         nodeAffinity:

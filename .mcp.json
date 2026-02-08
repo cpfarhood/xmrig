@@ -1,0 +1,33 @@
+{
+  "mcpServers": {
+    "github": {
+      "command": "github-mcp-server",
+      "args": ["stdio"],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "${CLAUDE_GITHUB_TOKEN}"
+      }
+    },
+    "gitea (git.farh.net)": {
+      "command": "gitea-mcp-server",
+      "args": ["-t", "stdio", "-host", "https://git.farh.net", "-token", "${CLAUDE_GITEA_TOKEN}"]
+    },
+    "kubernetes (local)": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "kubernetes-mcp-server@latest"
+      ]
+    },
+    "flux (local)":{
+      "command":"flux-operator-mcp",
+      "args":["serve"],
+      "env":{
+        "KUBECONFIG":"/Users/cpfarhood/.kube/config"
+      }
+    },
+    "playwright": {
+      "command": "npx",
+      "args": ["-y", "@playwright/mcp@latest"]
+    }
+  }
+}

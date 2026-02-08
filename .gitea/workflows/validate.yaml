@@ -1,0 +1,94 @@
+name: Validate Manifests
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  yaml-lint:
+    name: YAML Lint
+    runs-on: ubuntu-latest
+    container:
+      image: catthehacker/ubuntu:act-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install yamllint
+        run: |
+          python3 -m pip install --break-system-packages yamllint
+
+      - name: Run yamllint
+        run: |
+          yamllint -c .yamllint.yaml .
+
+  kustomize-build:
+    name: Kustomize Build Test
+    runs-on: ubuntu-latest
+    container:
+      image: catthehacker/ubuntu:act-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install kubectl with kustomize
+        run: |
+          curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+          chmod +x kubectl
+          mv kubectl /usr/local/bin/
+
+      - name: Test root kustomization
+        run: |
+          if [ -f "kustomization.yaml" ]; then
+            echo "Building root kustomization..."
+            kubectl kustomize . > /tmp/manifests.yaml
+            echo "✓ Root kustomization builds successfully"
+          else
+            echo "No root kustomization.yaml found"
+          fi
+
+      - name: Test individual app kustomizations
+        run: |
+          find . -maxdepth 2 -name "kustomization.yaml" -not -path "./kustomization.yaml" | while read config; do
+            app_dir=$(dirname "$config")
+            echo "Building $app_dir kustomization..."
+            kubectl kustomize "$app_dir" > /dev/null
+            echo "✓ $app_dir kustomization builds successfully"
+          done
+
+  kubeconform:
+    name: Kubernetes Schema Validation
+    runs-on: ubuntu-latest
+    container:
+      image: catthehacker/ubuntu:act-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install kubectl and kubeconform
+        run: |
+          # Install kubectl
+          curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+          chmod +x kubectl
+          mv kubectl /usr/local/bin/
+
+          # Install kubeconform
+          curl -L https://github.com/yannh/kubeconform/releases/latest/download/kubeconform-linux-amd64.tar.gz | tar xz
+          chmod +x kubeconform
+          mv kubeconform /usr/local/bin/
+
+      - name: Validate Kubernetes manifests
+        run: |
+          if [ -f "kustomization.yaml" ]; then
+            kubectl kustomize . | kubeconform \
+              -schema-location default \
+              -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
+              -summary \
+              -output text \
+              -ignore-missing-schemas \
+              -verbose
+          fi

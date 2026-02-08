@@ -1,0 +1,23 @@
+soft-fail: false
+quiet: true
+compact: true
+framework:
+  - all
+skip-check:
+  - CKV_K8S_21 # Default namespace usage
+  - CKV_K8S_43 # Image tag validation
+  # Intentional security exceptions for mining workload
+  - CKV_K8S_37 # Capabilities - required for MSR access
+  - CKV_K8S_8  # Liveness probe - not applicable for mining
+  - CKV_K8S_9  # Readiness probe - not applicable for mining
+  - CKV_K8S_22 # Read-only filesystem - needs write access
+  - CKV_K8S_23 # Run as root - required for MSR access
+  - CKV_K8S_40 # High UID - needs root for MSR access
+  - CKV_K8S_20 # Allow privilege escalation - required for privileged mode
+  - CKV_K8S_29 # Security context - intentionally permissive
+  - CKV_K8S_11 # CPU limits - intentionally not set per design
+  - CKV_K8S_10 # CPU requests - intentionally not set per design
+  - CKV_K8S_28 # NET_RAW capability - required for privileged mode
+  - CKV_K8S_14 # Image tag latest - acceptable for this use case
+  - CKV_K8S_31 # Seccomp profile - incompatible with privileged mode
+  - CKV_K8S_16 # Privileged container - required for MSR access

@@ -1,0 +1,279 @@
+name: Best Practices
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  kube-score:
+    name: Kube-score Analysis
+    runs-on: ubuntu-latest
+    container:
+      image: catthehacker/ubuntu:act-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install kubectl and kube-score
+        run: |
+          # Install kubectl
+          curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+          chmod +x kubectl
+          mv kubectl /usr/local/bin/
+
+          # Install kube-score
+          wget https://github.com/zegl/kube-score/releases/download/v1.18.0/kube-score_1.18.0_linux_amd64.tar.gz
+          tar -xzf kube-score_1.18.0_linux_amd64.tar.gz
+          chmod +x kube-score
+          mv kube-score /usr/local/bin/
+
+      - name: Run kube-score
+        run: |
+          if [ -f "kustomization.yaml" ]; then
+            kubectl kustomize . | kube-score score - \
+              --ignore-test pod-networkpolicy \
+              --ignore-test deployment-has-poddisruptionbudget \
+              --ignore-test container-security-context-user-group-id \
+              --ignore-test container-security-context-readonlyrootfilesystem \
+              --ignore-test container-image-tag \
+              --ignore-test container-ephemeral-storage-request-and-limit \
+              --ignore-test container-resources \
+              --ignore-test pod-probes \
+              --ignore-test container-security-context-privileged \
+              --output-format ci
+          fi
+
+  polaris:
+    name: Polaris Audit
+    runs-on: ubuntu-latest
+    container:
+      image: catthehacker/ubuntu:act-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install kubectl and polaris
+        run: |
+          # Install kubectl
+          curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+          chmod +x kubectl
+          mv kubectl /usr/local/bin/
+
+          # Install polaris
+          wget https://github.com/FairwindsOps/polaris/releases/download/9.5.0/polaris_linux_amd64.tar.gz
+          tar -xzf polaris_linux_amd64.tar.gz
+          chmod +x polaris
+          mv polaris /usr/local/bin/
+
+      - name: Run Polaris audit
+        run: |
+          if [ -f "kustomization.yaml" ]; then
+            kubectl kustomize . > manifests.yaml
+            polaris audit --audit-path manifests.yaml \
+              --format pretty \
+              --set-exit-code-below-score 50
+          fi
+
+  resource-analysis:
+    name: Resource Usage Analysis
+    runs-on: ubuntu-latest
+    container:
+      image: catthehacker/ubuntu:act-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install kubectl and yq
+        run: |
+          curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+          chmod +x kubectl
+          mv kubectl /usr/local/bin/
+
+          wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O yq
+          chmod +x yq
+          mv yq /usr/local/bin/
+
+      - name: Analyze resource requests and limits
+        run: |
+          echo "# Resource Analysis Report"
+          echo ""
+          echo "## Applications Resource Configuration"
+          echo ""
+          echo "| Application | Container | CPU Request | CPU Limit | Memory Request | Memory Limit |"
+          echo "|-------------|-----------|-------------|-----------|----------------|--------------|"
+
+          # Find all directories with kustomization.yaml
+          find . -maxdepth 2 -name "kustomization.yaml" | while read config; do
+            app_dir=$(dirname "$config")
+            if [ "$app_dir" != "." ]; then
+               manifests=$(kubectl kustomize "$app_dir" 2>/dev/null)
+               if [ -n "$manifests" ]; then
+                 echo "$manifests" | yq eval-all '
+                   select(.kind == "Deployment" or .kind == "StatefulSet") |
+                   .spec.template.spec.containers[] |
+                   "| '"$app_dir"' | \(.name) | \(.resources.requests.cpu // "none") | \(.resources.limits.cpu // "none") | \(.resources.requests.memory // "none") | \(.resources.limits.memory // "none") |"
+                 ' - 2>/dev/null || true
+               fi
+            fi
+          done
+
+  pr-summary:
+    name: PR Summary Report
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    needs: [kube-score, polaris, resource-analysis]
+    container:
+      image: catthehacker/ubuntu:act-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Generate PR summary
+        env:
+          GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
+          GITEA_API: ${{ github.server_url }}/api/v1/repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments
+        run: |
+          cat > summary.md << EOF
+          ## Best Practices Validation Summary
+
+          ✅ All validation checks completed
+
+          ### Checks Run:
+          - **kube-score**: Kubernetes best practices analysis
+          - **Polaris**: Security and reliability audit
+          - **Resource Analysis**: CPU and memory configuration review
+
+          See individual job logs for detailed results.
+
+          ---
+          *Automated by Gitea Actions*
+          EOF
+
+          if [ -n "${GITEA_TOKEN}" ]; then
+            jq -n --rawfile body summary.md '{body: $body}' > comment-payload.json
+
+            curl -s -X POST \
+              -H "Authorization: token ${GITEA_TOKEN}" \
+              -H "Content-Type: application/json" \
+              -d @comment-payload.json \
+              "${GITEA_API}" || echo "Failed to post comment (token may not be configured)"
+          else
+            echo "GITEA_TOKEN not configured, skipping comment"
+            cat summary.md
+          fi
+
+  polaris-pr-review:
+    name: Polaris PR Review
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    container:
+      image: catthehacker/ubuntu:act-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install tools
+        run: |
+          # Install kubectl
+          curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+          chmod +x kubectl
+          mv kubectl /usr/local/bin/
+
+          # Install polaris
+          wget https://github.com/FairwindsOps/polaris/releases/download/9.5.0/polaris_linux_amd64.tar.gz
+          tar -xzf polaris_linux_amd64.tar.gz
+          chmod +x polaris
+          mv polaris /usr/local/bin/
+
+          # Install jq
+          apt-get update && apt-get install -y jq
+
+      - name: Run Polaris and post review
+        env:
+          GITEA_TOKEN: ${{ secrets.POLARIS_GITEA_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          GITEA_API: ${{ github.server_url }}/api/v1/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/reviews
+        run: |
+          if [ ! -f "kustomization.yaml" ]; then
+            echo "No root kustomization.yaml, skipping Polaris review"
+            exit 0
+          fi
+
+          kubectl kustomize . > manifests.yaml
+          if [ ! -s manifests.yaml ]; then
+             echo "Manifests are empty, skipping"
+             exit 0
+          fi
+
+          polaris audit --audit-path manifests.yaml --format json > polaris-results.json || true
+
+          DANGERS=$(jq '.Summary.Dangers // 0' polaris-results.json)
+          WARNINGS=$(jq '.Summary.Warnings // 0' polaris-results.json)
+          SCORE=$(jq '.Summary.Score // 0' polaris-results.json)
+
+          if [ "$DANGERS" -gt 0 ]; then
+             REVIEW_STATE="REQUEST_CHANGES"
+             VERDICT="BLOCKED: ${DANGERS} danger(s) detected. Score: ${SCORE}%"
+             EXIT_CODE=1
+          elif [ "$WARNINGS" -gt 0 ]; then
+             REVIEW_STATE="COMMENT"
+             VERDICT="WARNING: ${WARNINGS} warning(s) detected. Score: ${SCORE}%"
+             EXIT_CODE=0
+          else
+             REVIEW_STATE="APPROVED"
+             VERDICT="PASSED: No dangers or warnings. Score: ${SCORE}%"
+             EXIT_CODE=0
+          fi
+          
+          DETAILS=$(jq -r '
+            .Results[]? | 
+            .Name as $resName | .Kind as $resKind | .Namespace as $resNs | 
+            (
+              (.PodResult?.Results[]? | {sev: .Severity, msg: .Message, check: .ID, target: "Pod"}),
+              (.PodResult?.ContainerResults[]? | .Name as $contName | .Results[]? | {sev: .Severity, msg: .Message, check: .ID, target: $contName})
+            ) | 
+            select(.sev == "danger" or .sev == "warning") |
+            "| \(.sev) | \($resKind)/\($resName) | \(.target) | \(.check) | \(.msg) |"
+          ' polaris-results.json | head -c 4000)
+
+          cat > review-body.md << INTERNAL_EOF
+          ## Polaris Audit Results
+
+          **${VERDICT}**
+
+          ### Summary
+          | Metric | Value |
+          |--------|-------|
+          | Score | ${SCORE}% |
+          | Dangers | ${DANGERS} |
+          | Warnings | ${WARNINGS} |
+
+          <details>
+          <summary>Issues (click to expand)</summary>
+
+          | Severity | Resource | Container | Check | Message |
+          |----------|----------|-----------|-------|---------|
+          \${DETAILS}
+
+          </details>
+
+          ---
+          *Scanned by [Polaris](https://github.com/FairwindsOps/polaris)*
+          INTERNAL_EOF
+
+          jq -n \
+            --rawfile body review-body.md \
+            --arg event "$REVIEW_STATE" \
+            '{body: $body, event: $event}' > review-payload.json
+
+          curl -s -X POST \
+            -H "Authorization: token ${GITEA_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d @review-payload.json \
+            "${GITEA_API}" | jq .
+
+          exit $EXIT_CODE

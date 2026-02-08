@@ -1,0 +1,21 @@
+# Claude Code memory (auto-generated)
+.claude/memory/
+
+# Editor directories
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+
+# Kustomize build output
+/manifests.yaml

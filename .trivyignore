@@ -1,0 +1,5 @@
+# Avahi daemon in base images often triggers this
+CVE-2021-26720
+
+# Common false positives or accepted risks
+CVE-2023-52425

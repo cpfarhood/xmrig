@@ -1,0 +1,163 @@
+name: Best Practices
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  kube-score:
+    name: Kube-score Analysis
+    runs-on: ubuntu-latest
+    container:
+      image: catthehacker/ubuntu:act-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install kubectl and kube-score
+        run: |
+          # Install kubectl
+          curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+          chmod +x kubectl
+          mv kubectl /usr/local/bin/
+
+          # Install kube-score
+          wget https://github.com/zegl/kube-score/releases/download/v1.18.0/kube-score_1.18.0_linux_amd64.tar.gz
+          tar -xzf kube-score_1.18.0_linux_amd64.tar.gz
+          chmod +x kube-score
+          mv kube-score /usr/local/bin/
+
+      - name: Run kube-score
+        run: |
+          if [ -f "kustomization.yaml" ]; then
+            kubectl kustomize . | kube-score score - \
+              --ignore-test pod-networkpolicy \
+              --ignore-test deployment-has-poddisruptionbudget \
+              --ignore-test container-security-context-user-group-id \
+              --ignore-test container-security-context-readonlyrootfilesystem \
+              --output-format ci
+          fi
+
+  polaris:
+    name: Polaris Audit
+    runs-on: ubuntu-latest
+    container:
+      image: catthehacker/ubuntu:act-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install kubectl and polaris
+        run: |
+          # Install kubectl
+          curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+          chmod +x kubectl
+          mv kubectl /usr/local/bin/
+
+          # Install polaris
+          wget https://github.com/FairwindsOps/polaris/releases/download/9.5.0/polaris_linux_amd64.tar.gz
+          tar -xzf polaris_linux_amd64.tar.gz
+          chmod +x polaris
+          mv polaris /usr/local/bin/
+
+      - name: Run Polaris audit
+        run: |
+          if [ -f "kustomization.yaml" ]; then
+            kubectl kustomize . > manifests.yaml
+            polaris audit --audit-path manifests.yaml \
+              --format pretty \
+              --set-exit-code-on-danger \
+              --set-exit-code-below-score 70
+          fi
+
+  resource-analysis:
+    name: Resource Usage Analysis
+    runs-on: ubuntu-latest
+    container:
+      image: catthehacker/ubuntu:act-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install kubectl and yq
+        run: |
+          curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+          chmod +x kubectl
+          mv kubectl /usr/local/bin/
+
+          wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O yq
+          chmod +x yq
+          mv yq /usr/local/bin/
+
+      - name: Analyze resource requests and limits
+        run: |
+          echo "# Resource Analysis Report"
+          echo ""
+          echo "## Applications Resource Configuration"
+          echo ""
+          echo "| Application | Container | CPU Request | CPU Limit | Memory Request | Memory Limit |"
+          echo "|-------------|-----------|-------------|-----------|----------------|--------------|"
+
+          # Find all directories with kustomization.yaml
+          find . -maxdepth 2 -name "kustomization.yaml" | while read config; do
+            app_dir=$(dirname "$config")
+            if [ "$app_dir" != "." ]; then
+               manifests=$(kubectl kustomize "$app_dir" 2>/dev/null)
+               if [ -n "$manifests" ]; then
+                 echo "$manifests" | yq eval-all '
+                   select(.kind == "Deployment" or .kind == "StatefulSet") |
+                   .spec.template.spec.containers[] |
+                   "| '"$app_dir"' | \(.name) | \(.resources.requests.cpu // "none") | \(.resources.limits.cpu // "none") | \(.resources.requests.memory // "none") | \(.resources.limits.memory // "none") |"
+                 ' - 2>/dev/null || true
+               fi
+            fi
+          done
+
+  pr-summary:
+    name: PR Summary Report
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    needs: [kube-score, polaris, resource-analysis]
+    container:
+      image: catthehacker/ubuntu:act-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Generate PR summary
+        env:
+          GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
+          GITEA_API: ${{ github.server_url }}/api/v1/repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments
+        run: |
+          cat > summary.md << EOF
+          ## Best Practices Validation Summary
+
+          ✅ All validation checks completed
+
+          ### Checks Run:
+          - **kube-score**: Kubernetes best practices analysis
+          - **Polaris**: Security and reliability audit
+          - **Resource Analysis**: CPU and memory configuration review
+
+          See individual job logs for detailed results.
+
+          ---
+          *Automated by Gitea Actions*
+          EOF
+
+          if [ -n "${GITEA_TOKEN}" ]; then
+            jq -n --rawfile body summary.md '{body: $body}' > comment-payload.json
+
+            curl -s -X POST \
+              -H "Authorization: token ${GITEA_TOKEN}" \
+              -H "Content-Type: application/json" \
+              -d @comment-payload.json \
+              "${GITEA_API}" || echo "Failed to post comment (token may not be configured)"
+          else
+            echo "GITEA_TOKEN not configured, skipping comment"
+            cat summary.md
+          fi

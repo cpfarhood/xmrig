@@ -1,0 +1,8 @@
+soft-fail: false
+quiet: true
+compact: true
+framework:
+  - all
+skip-check:
+  - CKV_K8S_21 # Default namespace usage
+  - CKV_K8S_43 # Image tag validation

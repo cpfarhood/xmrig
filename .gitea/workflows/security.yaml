@@ -1,0 +1,302 @@
+name: Security Scan
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  trivy-scan:
+    name: Trivy Security Scan
+    runs-on: ubuntu-latest
+    container:
+      image: catthehacker/ubuntu:act-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Trivy
+        run: |
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
+
+      - name: Run Trivy config scan
+        run: |
+          trivy config \
+            --severity CRITICAL,HIGH \
+            --ignorefile .trivyignore \
+            --exit-code 0 \
+            --format table \
+            .
+
+  trivy-pr-review:
+    name: Trivy PR Review
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    container:
+      image: catthehacker/ubuntu:act-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Trivy and jq
+        run: |
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
+          apt-get update && apt-get install -y jq
+
+      - name: Get changed files
+        id: changed
+        run: |
+          CHANGED_FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD -- '*.yaml' '*.yml' '*.tf' | tr '\n' ' ')
+          echo "files=${CHANGED_FILES}" >> $GITHUB_OUTPUT
+          echo "Changed files: ${CHANGED_FILES}"
+
+      - name: Run Trivy scan and post review
+        env:
+          GITEA_TOKEN: ${{ secrets.TRIVY_GITEA_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          GITEA_API: ${{ github.server_url }}/api/v1/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/reviews
+          CHANGED_FILES: ${{ steps.changed.outputs.files }}
+        run: |
+          if [ -z "${CHANGED_FILES}" ]; then
+            echo "No IaC files changed, skipping scan"
+            exit 0
+          fi
+
+          trivy config \
+            --severity CRITICAL,HIGH,MEDIUM,LOW \
+            --ignorefile .trivyignore \
+            --exit-code 0 \
+            --format json \
+            --output trivy-results.json \
+            .
+
+          CHANGED_FILES_JSON=$(echo "${CHANGED_FILES}" | tr ' ' '\n' | sed '/^$/d' | jq -R . | jq -s .)
+
+          CRITICAL=$(jq --argjson files "$CHANGED_FILES_JSON" \
+            '[.Results[]? | select(.Target as $t | $files | any(. as $f | $t | endswith($f))) | .Misconfigurations[]? | select(.Severity == "CRITICAL")] | length' \
+            trivy-results.json)
+          HIGH=$(jq --argjson files "$CHANGED_FILES_JSON" \
+            '[.Results[]? | select(.Target as $t | $files | any(. as $f | $t | endswith($f))) | .Misconfigurations[]? | select(.Severity == "HIGH")] | length' \
+            trivy-results.json)
+          MEDIUM=$(jq --argjson files "$CHANGED_FILES_JSON" \
+            '[.Results[]? | select(.Target as $t | $files | any(. as $f | $t | endswith($f))) | .Misconfigurations[]? | select(.Severity == "MEDIUM")] | length' \
+            trivy-results.json)
+          LOW=$(jq --argjson files "$CHANGED_FILES_JSON" \
+            '[.Results[]? | select(.Target as $t | $files | any(. as $f | $t | endswith($f))) | .Misconfigurations[]? | select(.Severity == "LOW")] | length' \
+            trivy-results.json)
+          TOTAL_FAILED=$(( CRITICAL + HIGH + MEDIUM + LOW ))
+
+          if [ "$CRITICAL" -gt 0 ]; then
+            REVIEW_STATE="REQUEST_CHANGES"
+            VERDICT="BLOCKED: ${CRITICAL} critical finding(s) detected"
+            EXIT_CODE=1
+          elif [ "$HIGH" -gt 0 ]; then
+            REVIEW_STATE="COMMENT"
+            VERDICT="WARNING: ${HIGH} high severity finding(s) detected"
+            EXIT_CODE=0
+          else
+            REVIEW_STATE="APPROVED"
+            VERDICT="PASSED: No critical or high severity findings"
+            EXIT_CODE=0
+          fi
+
+          DETAILS=$(jq -r --argjson files "$CHANGED_FILES_JSON" '
+            [.Results[]? | select(.Target as $t | $files | any(. as $f | $t | endswith($f))) |
+              .Target as $t | .Misconfigurations[]? |
+              "| \(.Severity) | \(.ID) | \(.Title) | \($t) |"
+            ] | join("\n")' trivy-results.json)
+
+          cat > review-body.md << EOF
+          ## Trivy Security Scan Results
+
+          **${VERDICT}**
+
+          > Scanned ${CHANGED_FILES:-"no files"}
+
+          ### Summary
+          | Severity | Count |
+          |----------|-------|
+          | Critical | ${CRITICAL} |
+          | High | ${HIGH} |
+          | Medium | ${MEDIUM} |
+          | Low | ${LOW} |
+          | **Total** | **${TOTAL_FAILED}** |
+
+          <details>
+          <summary>Failed Checks (click to expand)</summary>
+
+          | Severity | Check ID | Description | File |
+          |----------|----------|-------------|------|
+          ${DETAILS}
+
+          </details>
+
+          ---
+          *Scanned by [Trivy](https://github.com/aquasecurity/trivy)*
+          EOF
+
+          jq -n \
+            --rawfile body review-body.md \
+            --arg event "$REVIEW_STATE" \
+            '{body: $body, event: $event}' > review-payload.json
+
+          echo "Posting review to: ${GITEA_API}"
+          echo "Review state: ${REVIEW_STATE}"
+
+          curl -s -X POST \
+            -H "Authorization: token ${GITEA_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d @review-payload.json \
+            "${GITEA_API}" || echo "Failed to post review (token may not be configured)"
+
+          exit $EXIT_CODE
+
+  checkov-scan:
+    name: Checkov IaC Scan
+    runs-on: ubuntu-latest
+    container:
+      image: catthehacker/ubuntu:act-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Checkov
+        run: |
+          python3 -m venv /opt/checkov
+          /opt/checkov/bin/pip install checkov
+
+      - name: Run Checkov scan
+        run: |
+          /opt/checkov/bin/checkov -d . \
+            --config-file .checkov.yaml \
+            --output cli
+
+  checkov-pr-review:
+    name: Checkov PR Review
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    container:
+      image: catthehacker/ubuntu:act-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Checkov and jq
+        run: |
+          python3 -m venv /opt/checkov
+          /opt/checkov/bin/pip install checkov
+          apt-get update && apt-get install -y jq
+
+      - name: Get changed files
+        id: changed
+        run: |
+          CHANGED_FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD -- '*.yaml' '*.yml' '*.tf' | tr '\n' ' ')
+          echo "files=${CHANGED_FILES}" >> $GITHUB_OUTPUT
+          echo "Changed files: ${CHANGED_FILES}"
+
+      - name: Run Checkov scan and post review
+        env:
+          GITEA_TOKEN: ${{ secrets.CHECKOV_GITEA_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          GITEA_API: ${{ github.server_url }}/api/v1/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/reviews
+          CHANGED_FILES: ${{ steps.changed.outputs.files }}
+        run: |
+          if [ -z "${CHANGED_FILES}" ]; then
+            echo "No IaC files changed, skipping scan"
+            exit 0
+          fi
+
+          /opt/checkov/bin/checkov -d . \
+            --config-file .checkov.yaml \
+            --output json \
+            > checkov-results.json || true
+
+          CHANGED_FILES_JSON=$(echo "${CHANGED_FILES}" | tr ' ' '\n' | sed '/^$/d' | jq -R . | jq -s .)
+
+          CRITICAL=$(jq --argjson files "$CHANGED_FILES_JSON" \
+            '[.[] | .results.failed_checks[]? | select(.file_path as $fp | $files | any(. as $f | $fp | endswith($f))) | select(.severity == "CRITICAL")] | length' \
+            checkov-results.json)
+          HIGH=$(jq --argjson files "$CHANGED_FILES_JSON" \
+            '[.[] | .results.failed_checks[]? | select(.file_path as $fp | $files | any(. as $f | $fp | endswith($f))) | select(.severity == "HIGH")] | length' \
+            checkov-results.json)
+          MEDIUM=$(jq --argjson files "$CHANGED_FILES_JSON" \
+            '[.[] | .results.failed_checks[]? | select(.file_path as $fp | $files | any(. as $f | $fp | endswith($f))) | select(.severity == "MEDIUM")] | length' \
+            checkov-results.json)
+          LOW=$(jq --argjson files "$CHANGED_FILES_JSON" \
+            '[.[] | .results.failed_checks[]? | select(.file_path as $fp | $files | any(. as $f | $fp | endswith($f))) | select(.severity == "LOW")] | length' \
+            checkov-results.json)
+          UNSET=$(jq --argjson files "$CHANGED_FILES_JSON" \
+            '[.[] | .results.failed_checks[]? | select(.file_path as $fp | $files | any(. as $f | $fp | endswith($f))) | select(.severity == null or .severity == "UNKNOWN" or .severity == "NONE")] | length' \
+            checkov-results.json)
+          TOTAL_FAILED=$(( CRITICAL + HIGH + MEDIUM + LOW + UNSET ))
+
+          if [ "$CRITICAL" -gt 0 ]; then
+            REVIEW_STATE="REQUEST_CHANGES"
+            VERDICT="BLOCKED: ${CRITICAL} critical finding(s) detected"
+            EXIT_CODE=1
+          elif [ "$HIGH" -gt 0 ]; then
+            REVIEW_STATE="COMMENT"
+            VERDICT="WARNING: ${HIGH} high severity finding(s) detected"
+            EXIT_CODE=0
+          else
+            REVIEW_STATE="APPROVED"
+            VERDICT="PASSED: No critical or high severity findings"
+            EXIT_CODE=0
+          fi
+
+          DETAILS=$(jq -r --argjson files "$CHANGED_FILES_JSON" '
+            [.[] | .check_type as $ct |
+              .results.failed_checks[]? |
+              select(.file_path as $fp | $files | any(. as $f | $fp | endswith($f))) |
+              "| \(.severity // "UNSET") | \(.check_id) | \(.check_name) | \(.file_path) |"
+            ] | join("\n")' checkov-results.json)
+
+          cat > review-body.md << EOF
+          ## Checkov IaC Scan Results
+
+          **${VERDICT}**
+
+          > Scanned ${CHANGED_FILES:-"no files"}
+
+          ### Summary
+          | Severity | Count |
+          |----------|-------|
+          | Critical | ${CRITICAL} |
+          | High | ${HIGH} |
+          | Medium | ${MEDIUM} |
+          | Low | ${LOW} |
+          | Unset | ${UNSET} |
+          | **Total** | **${TOTAL_FAILED}** |
+
+          <details>
+          <summary>Failed Checks (click to expand)</summary>
+
+          | Severity | Check ID | Description | File |
+          |----------|----------|-------------|------|
+          ${DETAILS}
+
+          </details>
+
+          ---
+          *Scanned by [Checkov](https://github.com/bridgecrewio/checkov)*
+          EOF
+
+          jq -n \
+            --rawfile body review-body.md \
+            --arg event "$REVIEW_STATE" \
+            '{body: $body, event: $event}' > review-payload.json
+
+          curl -s -X POST \
+            -H "Authorization: token ${GITEA_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d @review-payload.json \
+            "${GITEA_API}" || echo "Failed to post review (token may not be configured)"
+
+          exit $EXIT_CODE

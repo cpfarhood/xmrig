@@ -128,6 +128,15 @@ kubectl logs -l app.kubernetes.io/name=xmrig -n <namespace>
 - **.yamllint.yaml**: YAML linting rules
   - Disables: line-length, document-start, truthy checks
 
+## Flux Variable Substitution
+
+The deployment uses Flux `postBuild.substitute` for configuration:
+
+- **XMRIG_WALLET**: Monero wallet address (default: existing wallet in manifest)
+- **XMRIG_POOL**: Mining pool address (default: pool.supportxmr.com:443)
+
+Configure via Flux Kustomization `spec.postBuild.substitute` to override defaults without modifying manifests.
+
 ## Key Architectural Decisions
 
 1. **DaemonSet over Deployment**: Ensures mining runs on all worker nodes for distributed resource utilization

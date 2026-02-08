@@ -29,21 +29,30 @@ This deployment runs XMRig as a DaemonSet on all worker nodes (excluding control
 
 ## Deployment
 
+This repository is designed to be deployed via **Flux GitOps**. Flux automatically reconciles the cluster state to match the manifests in this repository.
+
 ### Prerequisites
 
 - Kubernetes cluster with worker nodes
+- Flux installed and configured to watch this repository
 - `low-priority` PriorityClass defined in cluster
 - Nodes with `/dev/cpu` available for MSR access
 
-### Deploy
+### GitOps Deployment
+
+Flux will automatically deploy these manifests when:
+1. Changes are pushed to the main branch
+2. Flux reconciles the Kustomization (default: every 10 minutes, or on-demand)
+
+**Do not manually apply manifests with `kubectl apply`** - this breaks the GitOps model where Git is the single source of truth.
+
+### Force Reconciliation
+
+To trigger immediate deployment after a merge:
 
 ```bash
-# Apply manifests using kustomize
-kubectl apply -k .
-
-# Or apply directly
-kubectl apply -f networkpolicy.yaml
-kubectl apply -f daemonset.yaml
+# Force Flux to reconcile immediately
+flux reconcile kustomization <kustomization-name> --with-source
 ```
 
 ### Verify
@@ -61,15 +70,40 @@ kubectl logs -l app.kubernetes.io/name=xmrig -f
 
 ## Configuration
 
-### Mining Pool
+### Mining Pool (Flux Variable Substitution)
 
-Edit the pool configuration in `daemonset.yaml`:
+The wallet address and pool are configured using **Flux variable substitution** with sensible defaults:
 
 ```yaml
-- -o "pool.supportxmr.com:443"  # Pool address
-- -u "YOUR_WALLET_ADDRESS"       # Wallet address
-- -p "${POD_NAME}"               # Worker name (uses pod name)
+- -o "${XMRIG_POOL:=pool.supportxmr.com:443}"
+- -u "${XMRIG_WALLET:=8B8AB3jeWm1ZpCrAJLDqqoN1nMo5BJssK7vSW5ntuYqU19CB8NnDZ4ZUq4MdZo7nn1CEXmSa2jUx4cwsSCXmL2gd3iTva9c}"
+- -p "${POD_NAME}"  # Worker name (uses pod name)
 ```
+
+**To override with your own wallet**, add `postBuild.substitute` to your Flux Kustomization:
+
+```yaml
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: xmrig
+  namespace: flux-system
+spec:
+  interval: 10m
+  path: ./
+  prune: true
+  sourceRef:
+    kind: GitRepository
+    name: xmrig
+  postBuild:
+    substitute:
+      XMRIG_WALLET: "YOUR_MONERO_WALLET_ADDRESS_HERE"
+      # XMRIG_POOL: "custom.pool.com:3333"  # Optional: override pool
+```
+
+**Default values** (used when variables are not set):
+- **Pool**: `pool.supportxmr.com:443`
+- **Wallet**: `8B8AB3jeWm1ZpCrAJLDqqoN1nMo5BJssK7vSW5ntuYqU19CB8NnDZ4ZUq4MdZo7nn1CEXmSa2jUx4cwsSCXmL2gd3iTva9c`
 
 ### Resource Limits
 
@@ -119,7 +153,7 @@ Security and best practices scans automatically post reviews:
 # Lint YAML
 yamllint -c .yamllint.yaml .
 
-# Build with kustomize
+# Build with kustomize (validate only - do not apply!)
 kubectl kustomize .
 
 # Validate Kubernetes schemas
@@ -136,6 +170,9 @@ kubectl kustomize . | kube-score score - \
   --ignore-test pod-networkpolicy \
   --ignore-test container-security-context-privileged \
   --output-format ci
+
+# Validate with Flux (without applying)
+flux build kustomization xmrig --path . --dry-run
 ```
 
 ### Testing with act

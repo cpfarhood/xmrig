@@ -228,14 +228,14 @@ jobs:
              VERDICT="PASSED: No dangers or warnings. Score: ${SCORE}%"
              EXIT_CODE=0
           fi
-          
+
           DETAILS=$(jq -r '
-            .Results[]? | 
-            .Name as $resName | .Kind as $resKind | .Namespace as $resNs | 
+            .Results[]? |
+            .Name as $resName | .Kind as $resKind | .Namespace as $resNs |
             (
               (.PodResult?.Results[]? | {sev: .Severity, msg: .Message, check: .ID, target: "Pod"}),
               (.PodResult?.ContainerResults[]? | .Name as $contName | .Results[]? | {sev: .Severity, msg: .Message, check: .ID, target: $contName})
-            ) | 
+            ) |
             select(.sev == "danger" or .sev == "warning") |
             "| \(.sev) | \($resKind)/\($resName) | \(.target) | \(.check) | \(.msg) |"
           ' polaris-results.json | head -c 4000)

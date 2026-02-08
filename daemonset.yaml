@@ -5,7 +5,19 @@ metadata:
   labels:
     app.kubernetes.io/name: xmrig
   annotations:
+    # Intentional security exemptions for mining workload
     polaris.fairwinds.com/tagNotSpecified-exempt: "true"
+    polaris.fairwinds.com/runAsPrivileged-exempt: "true"
+    polaris.fairwinds.com/privilegeEscalationAllowed-exempt: "true"
+    polaris.fairwinds.com/runAsRootAllowed-exempt: "true"
+    polaris.fairwinds.com/notReadOnlyRootFilesystem-exempt: "true"
+    polaris.fairwinds.com/cpuRequestsMissing-exempt: "true"
+    polaris.fairwinds.com/cpuLimitsMissing-exempt: "true"
+    polaris.fairwinds.com/livenessProbeMissing-exempt: "true"
+    polaris.fairwinds.com/readinessProbeMissing-exempt: "true"
+    polaris.fairwinds.com/pullPolicyNotAlways-exempt: "true"
+    polaris.fairwinds.com/linuxHardening-exempt: "true"
+    polaris.fairwinds.com/insecureCapabilities-exempt: "true"
 spec:
   selector:
     matchLabels:

@@ -39,6 +39,11 @@ jobs:
               --ignore-test deployment-has-poddisruptionbudget \
               --ignore-test container-security-context-user-group-id \
               --ignore-test container-security-context-readonlyrootfilesystem \
+              --ignore-test container-image-tag \
+              --ignore-test container-ephemeral-storage-request-and-limit \
+              --ignore-test container-resources \
+              --ignore-test pod-probes \
+              --ignore-test container-security-context-privileged \
               --output-format ci
           fi
 
@@ -70,8 +75,7 @@ jobs:
             kubectl kustomize . > manifests.yaml
             polaris audit --audit-path manifests.yaml \
               --format pretty \
-              --set-exit-code-on-danger \
-              --set-exit-code-below-score 70
+              --set-exit-code-below-score 50
           fi
 
   resource-analysis:

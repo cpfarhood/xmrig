@@ -70,15 +70,40 @@ kubectl logs -l app.kubernetes.io/name=xmrig -f
 
 ## Configuration
 
-### Mining Pool
+### Mining Pool (Flux Variable Substitution)
 
-Edit the pool configuration in `daemonset.yaml`:
+The wallet address and pool are configured using **Flux variable substitution** with sensible defaults:
 
 ```yaml
-- -o "pool.supportxmr.com:443"  # Pool address
-- -u "YOUR_WALLET_ADDRESS"       # Wallet address
-- -p "${POD_NAME}"               # Worker name (uses pod name)
+- -o "${XMRIG_POOL:=pool.supportxmr.com:443}"
+- -u "${XMRIG_WALLET:=8B8AB3jeWm1ZpCrAJLDqqoN1nMo5BJssK7vSW5ntuYqU19CB8NnDZ4ZUq4MdZo7nn1CEXmSa2jUx4cwsSCXmL2gd3iTva9c}"
+- -p "${POD_NAME}"  # Worker name (uses pod name)
 ```
+
+**To override with your own wallet**, add `postBuild.substitute` to your Flux Kustomization:
+
+```yaml
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: xmrig
+  namespace: flux-system
+spec:
+  interval: 10m
+  path: ./
+  prune: true
+  sourceRef:
+    kind: GitRepository
+    name: xmrig
+  postBuild:
+    substitute:
+      XMRIG_WALLET: "YOUR_MONERO_WALLET_ADDRESS_HERE"
+      # XMRIG_POOL: "custom.pool.com:3333"  # Optional: override pool
+```
+
+**Default values** (used when variables are not set):
+- **Pool**: `pool.supportxmr.com:443`
+- **Wallet**: `8B8AB3jeWm1ZpCrAJLDqqoN1nMo5BJssK7vSW5ntuYqU19CB8NnDZ4ZUq4MdZo7nn1CEXmSa2jUx4cwsSCXmL2gd3iTva9c`
 
 ### Resource Limits
 
